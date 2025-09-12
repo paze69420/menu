@@ -1,11 +1,12 @@
+name: CI - Run Tests
 
-push:
-  branches:
-    - main
-
-pull_request:
-  branches:
-    - main
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
   test:
