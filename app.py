@@ -1,68 +1,58 @@
-from flask import Flask, request, jsonify, make_response
+from flask import Flask, request, jsonify
+from flask_sqlalchemy import SQLAlchemy
+import os
+from dotenv import load_dotenv
 
+load_dotenv()
 app = Flask(__name__)
+app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL")
+db = SQLAlchemy(app)
 
-menu_items = [
-    {"id": 1, "name": "momo", "cuisine": "chinese"},
-    {"id": 2, "name": "Sushi", "cuisine": "japanese"},
-    {"id": 3, "name": "burger", "cuisine": "american"}
-]
+class MenuItem(db.Model):
+    __tablename__ = "menu_items"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100))
+    cuisine = db.Column(db.String(100))
 
+@app.route('/menu', methods=['GET'])
+def get_menu():
+    items = MenuItem.query.all()
+    return jsonify([{"id": i.id, "name": i.name, "cuisine": i.cuisine} for i in items])
 
-@app.route('/menu', methods=['GET']) 
-def get_menu():                        
-    return jsonify(menu_items) 
-   
 @app.route('/menu/<int:item_id>', methods=['GET'])
 def get_item(item_id):
-    item = next ((i for i in menu_items if i['id'] == item_id), None)
-    if item:
-        return jsonify(item)
-    return make_response(jsonify({"error": "Item not found"}), 404)
+    item = MenuItem.query.get(item_id)
+    if not item:
+        return jsonify({"error": "Not found"}), 404
+    return jsonify({"id": item.id, "name": item.name, "cuisine": item.cuisine})
 
 @app.route('/menu', methods=['POST'])
-def add_single_item():
+def add_item():
     data = request.get_json()
-    if not isinstance(data, dict):
-        return jsonify({"error": "Expected a single JSON object"}), 400
-    data['id'] = max([i['id'] for i in menu_items], default=0) + 1
-    menu_items.append(data)
-    return jsonify(data), 201
-
-@app.route('/menu/bulk', methods=['POST'])
-def add_multiple_items():
-    data = request.get_json()
-    if not isinstance(data, list):
-        return jsonify({"error": "Expected a list of JSON objects"}), 400
-    new_items = []
-    start_id = max([i['id'] for i in menu_items], default=0) + 1
-    for idx, item in enumerate(data, start=start_id):
-        item['id'] = idx
-        menu_items.append(item)
-        new_items.append(item)
-    return jsonify(new_items), 201
-
-@app.route('/menu/<int:item_id>', methods=['DELETE'])
-def delete_item(item_id):
-    item = next((i for i in menu_items if i["id"] == item_id), None)
-    if item is None:
-        return jsonify({"error": "Item not found"}), 404
-    menu_items.remove(item)
-    return jsonify({"message": "Item deleted successfully"}), 200
+    item = MenuItem(name=data["name"], cuisine=data["cuisine"])
+    db.session.add(item)
+    db.session.commit()
+    return jsonify({"id": item.id, "name": item.name, "cuisine": item.cuisine}), 201
 
 @app.route('/menu/<int:item_id>', methods=['PUT'])
 def update_item(item_id):
-    item = next((i for i in menu_items if i["id"] == item_id), None)
-    if item is None:
-        return jsonify({"error": "Item not found"}), 404
+    item = MenuItem.query.get(item_id)
+    if not item:
+        return jsonify({"error": "Not found"}), 404
     data = request.get_json()
-    if "name" in data:
-        item["name"] = data["name"]
-    if "cuisine" in data:
-        item["cuisine"] = data["cuisine"]
-    return jsonify(item), 200
+    item.name = data.get("name", item.name)
+    item.cuisine = data.get("cuisine", item.cuisine)
+    db.session.commit()
+    return jsonify({"id": item.id, "name": item.name, "cuisine": item.cuisine})
+
+@app.route('/menu/<int:item_id>', methods=['DELETE'])
+def delete_item(item_id):
+    item = MenuItem.query.get(item_id)
+    if not item:
+        return jsonify({"error": "Not found"}), 404
+    db.session.delete(item)
+    db.session.commit()
+    return jsonify({"message": "Deleted"})
 
 if __name__ == '__main__':
     app.run(debug=True)
-
-
